@@ -36,7 +36,6 @@ gem 'omniauth-twitter',       '~> 1.2.0'
 gem 'omniauth_crowd',         '~> 2.2.0'
 gem 'rack-oauth2',            '~> 1.2.1'
 gem 'jwt'
-gem 'iiet-accounts-oauth'
 
 # Spam and anti-bot protection
 gem 'recaptcha', '~> 3.0', require: 'recaptcha/rails'
@@ -347,3 +346,6 @@ gem "paranoia", "~> 2.0"
 
 # Health check
 gem 'health_check', '~> 1.5.1'
+
+# Added at 2016-07-02 10:28:25 +0200 by kruczjak:
+gem 'iiet-accounts-oauth', '= 0.0.1'
