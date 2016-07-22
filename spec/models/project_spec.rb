@@ -11,6 +11,8 @@ describe Project, models: true do
     it { is_expected.to have_many(:issues).dependent(:destroy) }
     it { is_expected.to have_many(:milestones).dependent(:destroy) }
     it { is_expected.to have_many(:project_members).dependent(:destroy) }
+    it { is_expected.to have_many(:users).through(:project_members) }
+    it { is_expected.to have_many(:requesters).dependent(:destroy) }
     it { is_expected.to have_many(:notes).dependent(:destroy) }
     it { is_expected.to have_many(:snippets).class_name('ProjectSnippet').dependent(:destroy) }
     it { is_expected.to have_many(:deploy_keys_projects).dependent(:destroy) }
@@ -31,6 +33,34 @@ describe Project, models: true do
     it { is_expected.to have_many(:environments).dependent(:destroy) }
     it { is_expected.to have_many(:deployments).dependent(:destroy) }
     it { is_expected.to have_many(:todos).dependent(:destroy) }
+
+    describe '#members & #requesters' do
+      let(:project) { create(:project) }
+      let(:requester) { create(:user) }
+      let(:developer) { create(:user) }
+      before do
+        project.request_access(requester)
+        project.team << [developer, :developer]
+      end
+
+      describe '#members' do
+        it 'includes members and exclude requesters' do
+          member_user_ids = project.members.pluck(:user_id)
+
+          expect(member_user_ids).to include(developer.id)
+          expect(member_user_ids).not_to include(requester.id)
+        end
+      end
+
+      describe '#requesters' do
+        it 'does not include requesters' do
+          requester_user_ids = project.requesters.pluck(:user_id)
+
+          expect(requester_user_ids).to include(requester.id)
+          expect(requester_user_ids).not_to include(developer.id)
+        end
+      end
+    end
   end
 
   describe 'modules' do
@@ -56,12 +86,78 @@ describe Project, models: true do
     it { is_expected.to validate_length_of(:description).is_within(0..2000) }
     it { is_expected.to validate_presence_of(:creator) }
     it { is_expected.to validate_presence_of(:namespace) }
+    it { is_expected.to validate_presence_of(:repository_storage) }
 
     it 'should not allow new projects beyond user limits' do
       project2 = build(:project)
       allow(project2).to receive(:creator).and_return(double(can_create_project?: false, projects_limit: 0).as_null_object)
       expect(project2).not_to be_valid
       expect(project2.errors[:limit_reached].first).to match(/Personal project creation is not allowed/)
+    end
+
+    describe 'wiki path conflict' do
+      context "when the new path has been used by the wiki of other Project" do
+        it 'should have an error on the name attribute' do
+          new_project = build_stubbed(:project, namespace_id: project.namespace_id, path: "#{project.path}.wiki")
+
+          expect(new_project).not_to be_valid
+          expect(new_project.errors[:name].first).to eq('has already been taken')
+        end
+      end
+
+      context "when the new wiki path has been used by the path of other Project" do
+        it 'should have an error on the name attribute' do
+          project_with_wiki_suffix = create(:project, path: 'foo.wiki')
+          new_project = build_stubbed(:project, namespace_id: project_with_wiki_suffix.namespace_id, path: 'foo')
+
+          expect(new_project).not_to be_valid
+          expect(new_project.errors[:name].first).to eq('has already been taken')
+        end
+      end
+    end
+
+    context 'repository storages inclussion' do
+      let(:project2) { build(:project, repository_storage: 'missing') }
+
+      before do
+        storages = { 'custom' => 'tmp/tests/custom_repositories' }
+        allow(Gitlab.config.repositories).to receive(:storages).and_return(storages)
+      end
+
+      it "should not allow repository storages that don't match a label in the configuration" do
+        expect(project2).not_to be_valid
+        expect(project2.errors[:repository_storage].first).to match(/is not included in the list/)
+      end
+    end
+
+    it 'does not allow an invalid URI as import_url' do
+      project2 = build(:project, import_url: 'invalid://')
+
+      expect(project2).not_to be_valid
+    end
+
+    it 'does allow a valid URI as import_url' do
+      project2 = build(:project, import_url: 'ssh://test@gitlab.com/project.git')
+
+      expect(project2).to be_valid
+    end
+
+    it 'allows an empty URI' do
+      project2 = build(:project, import_url: '')
+
+      expect(project2).to be_valid
+    end
+
+    it 'does not produce import data on an empty URI' do
+      project2 = build(:project, import_url: '')
+
+      expect(project2.import_data).to be_nil
+    end
+
+    it 'does not produce import data on an invalid URI' do
+      project2 = build(:project, import_url: 'test://')
+
+      expect(project2.import_data).to be_nil
     end
   end
 
@@ -107,6 +203,24 @@ describe Project, models: true do
 
     it 'returns a String reference to the object' do
       expect(project.to_reference).to eq project.path_with_namespace
+    end
+  end
+
+  describe '#repository_storage_path' do
+    let(:project) { create(:project, repository_storage: 'custom') }
+
+    before do
+      FileUtils.mkdir('tmp/tests/custom_repositories')
+      storages = { 'custom' => 'tmp/tests/custom_repositories' }
+      allow(Gitlab.config.repositories).to receive(:storages).and_return(storages)
+    end
+
+    after do
+      FileUtils.rm_rf('tmp/tests/custom_repositories')
+    end
+
+    it 'returns the repository storage path' do
+      expect(project.repository_storage_path).to eq('tmp/tests/custom_repositories')
     end
   end
 
@@ -200,7 +314,7 @@ describe Project, models: true do
     end
   end
 
-  describe :update_merge_requests do
+  describe '#update_merge_requests' do
     let(:project) { create(:project) }
     let(:merge_request) { create(:merge_request, source_project: project, target_project: project) }
     let(:key) { create(:key, user_id: project.owner.id) }
@@ -216,7 +330,7 @@ describe Project, models: true do
     it 'should update merge request commits with new one if pushed to source branch' do
       project.update_merge_requests(prev_commit_id, commit_id, "refs/heads/#{merge_request.source_branch}", key.user)
       merge_request.reload
-      expect(merge_request.last_commit.id).to eq(commit_id)
+      expect(merge_request.diff_head_sha).to eq(commit_id)
     end
   end
 
@@ -249,7 +363,7 @@ describe Project, models: true do
     end
   end
 
-  describe :to_param do
+  describe '#to_param' do
     context 'with namespace' do
       before do
         @group = create :group, name: 'gitlab'
@@ -260,15 +374,15 @@ describe Project, models: true do
     end
   end
 
-  describe :repository do
+  describe '#repository' do
     let(:project) { create(:project) }
 
-    it 'should return valid repo' do
+    it 'returns valid repo' do
       expect(project.repository).to be_kind_of(Repository)
     end
   end
 
-  describe :default_issues_tracker? do
+  describe '#default_issues_tracker?' do
     let(:project) { create(:project) }
     let(:ext_project) { create(:redmine_project) }
 
@@ -281,7 +395,7 @@ describe Project, models: true do
     end
   end
 
-  describe :external_issue_tracker do
+  describe '#external_issue_tracker' do
     let(:project) { create(:project) }
     let(:ext_project) { create(:redmine_project) }
 
@@ -322,7 +436,7 @@ describe Project, models: true do
     end
   end
 
-  describe :cache_has_external_issue_tracker do
+  describe '#cache_has_external_issue_tracker' do
     let(:project) { create(:project) }
 
     it 'stores true if there is any external_issue_tracker' do
@@ -344,7 +458,58 @@ describe Project, models: true do
     end
   end
 
-  describe :open_branches do
+  describe '#external_wiki' do
+    let(:project) { create(:project) }
+
+    context 'with an active external wiki' do
+      before do
+        create(:service, project: project, type: 'ExternalWikiService', active: true)
+        project.external_wiki
+      end
+
+      it 'sets :has_external_wiki as true' do
+        expect(project.has_external_wiki).to be(true)
+      end
+
+      it 'sets :has_external_wiki as false if an external wiki service is destroyed later' do
+        expect(project.has_external_wiki).to be(true)
+
+        project.services.external_wikis.first.destroy
+
+        expect(project.has_external_wiki).to be(false)
+      end
+    end
+
+    context 'with an inactive external wiki' do
+      before do
+        create(:service, project: project, type: 'ExternalWikiService', active: false)
+      end
+
+      it 'sets :has_external_wiki as false' do
+        expect(project.has_external_wiki).to be(false)
+      end
+    end
+
+    context 'with no external wiki' do
+      before do
+        project.external_wiki
+      end
+
+      it 'sets :has_external_wiki as false' do
+        expect(project.has_external_wiki).to be(false)
+      end
+
+      it 'sets :has_external_wiki as true if an external wiki service is created later' do
+        expect(project.has_external_wiki).to be(false)
+
+        create(:service, project: project, type: 'ExternalWikiService', active: true)
+
+        expect(project.has_external_wiki).to be(true)
+      end
+    end
+  end
+
+  describe '#open_branches' do
     let(:project) { create(:project) }
 
     before do
@@ -353,6 +518,14 @@ describe Project, models: true do
 
     it { expect(project.open_branches.map(&:name)).to include('feature') }
     it { expect(project.open_branches.map(&:name)).not_to include('master') }
+
+    it "includes branches matching a protected branch wildcard" do
+      expect(project.open_branches.map(&:name)).to include('feature')
+
+      create(:protected_branch, name: 'feat*', project: project)
+
+      expect(Project.find(project.id).open_branches.map(&:name)).to include('feature')
+    end
   end
 
   describe '#star_count' do
@@ -413,7 +586,7 @@ describe Project, models: true do
     end
   end
 
-  describe :avatar_type do
+  describe '#avatar_type' do
     let(:project) { create(:project) }
 
     it 'should be true if avatar is image' do
@@ -427,7 +600,7 @@ describe Project, models: true do
     end
   end
 
-  describe :avatar_url do
+  describe '#avatar_url' do
     subject { project.avatar_url }
 
     let(:project) { create(:project) }
@@ -464,7 +637,7 @@ describe Project, models: true do
     end
   end
 
-  describe :pipeline do
+  describe '#pipeline' do
     let(:project) { create :project }
     let(:pipeline) { create :ci_pipeline, project: project, ref: 'master' }
 
@@ -484,7 +657,7 @@ describe Project, models: true do
     end
   end
 
-  describe :builds_enabled do
+  describe '#builds_enabled' do
     let(:project) { create :project }
 
     before { project.builds_enabled = true }
@@ -553,6 +726,21 @@ describe Project, models: true do
     end
   end
 
+  context 'repository storage by default' do
+    let(:project) { create(:empty_project) }
+
+    subject { project.repository_storage }
+
+    before do
+      storages = { 'alternative_storage' => '/some/path' }
+      allow(Gitlab.config.repositories).to receive(:storages).and_return(storages)
+      stub_application_setting(repository_storage: 'alternative_storage')
+      allow_any_instance_of(Project).to receive(:ensure_dir_exist).and_return(true)
+    end
+
+    it { is_expected.to eq('alternative_storage') }
+  end
+
   context 'shared runners by default' do
     let(:project) { create(:empty_project) }
 
@@ -571,7 +759,7 @@ describe Project, models: true do
     end
   end
 
-  describe :any_runners do
+  describe '#any_runners' do
     let(:project) { create(:empty_project, shared_runners_enabled: shared_runners_enabled) }
     let(:specific_runner) { create(:ci_runner) }
     let(:shared_runner) { create(:ci_runner, :shared) }
@@ -708,12 +896,12 @@ describe Project, models: true do
 
       expect(gitlab_shell).to receive(:mv_repository).
         ordered.
-        with("#{ns}/foo", "#{ns}/#{project.path}").
+        with(project.repository_storage_path, "#{ns}/foo", "#{ns}/#{project.path}").
         and_return(true)
 
       expect(gitlab_shell).to receive(:mv_repository).
         ordered.
-        with("#{ns}/foo.wiki", "#{ns}/#{project.path}.wiki").
+        with(project.repository_storage_path, "#{ns}/foo.wiki", "#{ns}/#{project.path}.wiki").
         and_return(true)
 
       expect_any_instance_of(SystemHooksService).
@@ -805,7 +993,7 @@ describe Project, models: true do
     context 'using a regular repository' do
       it 'creates the repository' do
         expect(shell).to receive(:add_repository).
-          with(project.path_with_namespace).
+          with(project.repository_storage_path, project.path_with_namespace).
           and_return(true)
 
         expect(project.repository).to receive(:after_create)
@@ -815,7 +1003,7 @@ describe Project, models: true do
 
       it 'adds an error if the repository could not be created' do
         expect(shell).to receive(:add_repository).
-          with(project.path_with_namespace).
+          with(project.repository_storage_path, project.path_with_namespace).
           and_return(false)
 
         expect(project.repository).not_to receive(:after_create)
@@ -838,14 +1026,66 @@ describe Project, models: true do
   describe '#protected_branch?' do
     let(:project) { create(:empty_project) }
 
-    it 'returns true when a branch is a protected branch' do
+    it 'returns true when the branch matches a protected branch via direct match' do
       project.protected_branches.create!(name: 'foo')
 
       expect(project.protected_branch?('foo')).to eq(true)
     end
 
-    it 'returns false when a branch is not a protected branch' do
+    it 'returns true when the branch matches a protected branch via wildcard match' do
+      project.protected_branches.create!(name: 'production/*')
+
+      expect(project.protected_branch?('production/some-branch')).to eq(true)
+    end
+
+    it 'returns false when the branch does not match a protected branch via direct match' do
       expect(project.protected_branch?('foo')).to eq(false)
+    end
+
+    it 'returns false when the branch does not match a protected branch via wildcard match' do
+      project.protected_branches.create!(name: 'production/*')
+
+      expect(project.protected_branch?('staging/some-branch')).to eq(false)
+    end
+  end
+
+  describe "#developers_can_push_to_protected_branch?" do
+    let(:project) { create(:empty_project) }
+
+    context "when the branch matches a protected branch via direct match" do
+      it "returns true if 'Developers can Push' is turned on" do
+        create(:protected_branch, name: "production", project: project, developers_can_push: true)
+
+        expect(project.developers_can_push_to_protected_branch?('production')).to be true
+      end
+
+      it "returns false if 'Developers can Push' is turned off" do
+        create(:protected_branch, name: "production", project: project, developers_can_push: false)
+
+        expect(project.developers_can_push_to_protected_branch?('production')).to be false
+      end
+    end
+
+    context "when the branch matches a protected branch via wilcard match" do
+      it "returns true if 'Developers can Push' is turned on" do
+        create(:protected_branch, name: "production/*", project: project, developers_can_push: true)
+
+        expect(project.developers_can_push_to_protected_branch?('production/some-branch')).to be true
+      end
+
+      it "returns false if 'Developers can Push' is turned off" do
+        create(:protected_branch, name: "production/*", project: project, developers_can_push: false)
+
+        expect(project.developers_can_push_to_protected_branch?('production/some-branch')).to be false
+      end
+    end
+
+    context "when the branch does not match a protected branch" do
+      it "returns false" do
+        create(:protected_branch, name: "production/*", project: project, developers_can_push: true)
+
+        expect(project.developers_can_push_to_protected_branch?('staging/some-branch')).to be false
+      end
     end
   end
 
@@ -925,6 +1165,85 @@ describe Project, models: true do
     end
   end
 
+  describe '#latest_successful_builds_for' do
+    def create_pipeline(status = 'success')
+      create(:ci_pipeline, project: project,
+                           sha: project.commit.sha,
+                           ref: project.default_branch,
+                           status: status)
+    end
+
+    def create_build(new_pipeline = pipeline, name = 'test')
+      create(:ci_build, :success, :artifacts,
+             pipeline: new_pipeline,
+             status: new_pipeline.status,
+             name: name)
+    end
+
+    let(:project) { create(:project) }
+    let(:pipeline) { create_pipeline }
+
+    context 'with many builds' do
+      it 'gives the latest builds from latest pipeline' do
+        pipeline1 = create_pipeline
+        pipeline2 = create_pipeline
+        build1_p2 = create_build(pipeline2, 'test')
+        create_build(pipeline1, 'test')
+        create_build(pipeline1, 'test2')
+        build2_p2 = create_build(pipeline2, 'test2')
+
+        latest_builds = project.latest_successful_builds_for
+
+        expect(latest_builds).to contain_exactly(build2_p2, build1_p2)
+      end
+    end
+
+    context 'with succeeded pipeline' do
+      let!(:build) { create_build }
+
+      context 'standalone pipeline' do
+        it 'returns builds for ref for default_branch' do
+          builds = project.latest_successful_builds_for
+
+          expect(builds).to contain_exactly(build)
+        end
+
+        it 'returns empty relation if the build cannot be found' do
+          builds = project.latest_successful_builds_for('TAIL')
+
+          expect(builds).to be_kind_of(ActiveRecord::Relation)
+          expect(builds).to be_empty
+        end
+      end
+
+      context 'with some pending pipeline' do
+        before do
+          create_build(create_pipeline('pending'))
+        end
+
+        it 'gives the latest build from latest pipeline' do
+          latest_build = project.latest_successful_builds_for
+
+          expect(latest_build).to contain_exactly(build)
+        end
+      end
+    end
+
+    context 'with pending pipeline' do
+      before do
+        pipeline.update(status: 'pending')
+        create_build(pipeline)
+      end
+
+      it 'returns empty relation' do
+        builds = project.latest_successful_builds_for
+
+        expect(builds).to be_kind_of(ActiveRecord::Relation)
+        expect(builds).to be_empty
+      end
+    end
+  end
+
   describe '.where_paths_in' do
     context 'without any paths' do
       it 'returns an empty relation' do
@@ -955,6 +1274,55 @@ describe Project, models: true do
 
         expect(projects).to contain_exactly(project1, project2)
       end
+    end
+  end
+
+  describe 'authorized_for_user' do
+    let(:group) { create(:group) }
+    let(:developer) { create(:user) }
+    let(:master) { create(:user) }
+    let(:personal_project) { create(:project, namespace: developer.namespace) }
+    let(:group_project) { create(:project, namespace: group) }
+    let(:members_project) { create(:project) }
+    let(:shared_project) { create(:project) }
+
+    before do
+      group.add_master(master)
+      group.add_developer(developer)
+
+      members_project.team << [developer, :developer]
+      members_project.team << [master, :master]
+
+      create(:project_group_link, project: shared_project, group: group)
+    end
+
+    it 'returns false for no user' do
+      expect(personal_project.authorized_for_user?(nil)).to be(false)
+    end
+
+    it 'returns true for personal projects of the user' do
+      expect(personal_project.authorized_for_user?(developer)).to be(true)
+    end
+
+    it 'returns true for projects of groups the user is a member of' do
+      expect(group_project.authorized_for_user?(developer)).to be(true)
+    end
+
+    it 'returns true for projects for which the user is a member of' do
+      expect(members_project.authorized_for_user?(developer)).to be(true)
+    end
+
+    it 'returns true for projects shared on a group the user is a member of' do
+      expect(shared_project.authorized_for_user?(developer)).to be(true)
+    end
+
+    it 'checks for the correct minimum level access' do
+      expect(group_project.authorized_for_user?(developer, Gitlab::Access::MASTER)).to be(false)
+      expect(group_project.authorized_for_user?(master, Gitlab::Access::MASTER)).to be(true)
+      expect(members_project.authorized_for_user?(developer, Gitlab::Access::MASTER)).to be(false)
+      expect(members_project.authorized_for_user?(master, Gitlab::Access::MASTER)).to be(true)
+      expect(shared_project.authorized_for_user?(developer, Gitlab::Access::MASTER)).to be(false)
+      expect(shared_project.authorized_for_user?(master, Gitlab::Access::MASTER)).to be(true)
     end
   end
 end

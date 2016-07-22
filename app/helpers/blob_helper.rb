@@ -1,10 +1,7 @@
 module BlobHelper
-  def highlighter(blob_name, blob_content, nowrap: false)
-    Gitlab::Highlight.new(blob_name, blob_content, nowrap: nowrap)
-  end
-
-  def highlight(blob_name, blob_content, nowrap: false, plain: false)
-    Gitlab::Highlight.highlight(blob_name, blob_content, nowrap: nowrap, plain: plain)
+  def highlight(blob_name, blob_content, repository: nil, plain: false)
+    highlighted = Gitlab::Highlight.highlight(blob_name, blob_content, plain: plain, repository: repository)
+    raw %(<pre class="code highlight"><code>#{highlighted}</code></pre>)
   end
 
   def no_highlight_files
@@ -29,7 +26,7 @@ module BlobHelper
     if !on_top_of_branch?(project, ref)
       button_tag "Edit", class: "btn disabled has-tooltip btn-file-option", title: "You can only edit files when you are on a branch", data: { container: 'body' }
     elsif can_edit_blob?(blob, project, ref)
-      link_to "Edit", edit_path, class: 'btn btn-file-option'
+      link_to "Edit", edit_path, class: 'btn btn-sm'
     elsif can?(current_user, :fork_project, project)
       continue_params = {
         to:     edit_path,

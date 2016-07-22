@@ -53,6 +53,14 @@
       left: 70px;
     }
   }
+
+  .nav-links {
+    svg {
+      position: relative;
+      top: 2px;
+      margin-right: 3px;
+    }
+  }
 }
 
 .build-header {
@@ -80,14 +88,6 @@
     float: none;
     margin-right: 2px;
     margin-left: 2px;
-  }
-}
-
-table.builds {
-  .build-link {
-    a {
-      color: $gl-dark-link-color;
-    }
   }
 }
 

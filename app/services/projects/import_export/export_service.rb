@@ -1,7 +1,6 @@
 module Projects
   module ImportExport
     class ExportService < BaseService
-
       def execute(_options = {})
         @shared = Gitlab::ImportExport::Shared.new(relative_path: File.join(project.path_with_namespace, 'work'))
         save_all
@@ -10,8 +9,8 @@ module Projects
       private
 
       def save_all
-        if [version_saver, project_tree_saver, uploads_saver, repo_saver, wiki_repo_saver].all?(&:save)
-          Gitlab::ImportExport::Saver.save(shared: @shared)
+        if [version_saver, avatar_saver, project_tree_saver, uploads_saver, repo_saver, wiki_repo_saver].all?(&:save)
+          Gitlab::ImportExport::Saver.save(project: project, shared: @shared)
           notify_success
         else
           cleanup_and_notify
@@ -20,6 +19,10 @@ module Projects
 
       def version_saver
         Gitlab::ImportExport::VersionSaver.new(shared: @shared)
+      end
+
+      def avatar_saver
+        Gitlab::ImportExport::AvatarSaver.new(project: project, shared: @shared)
       end
 
       def project_tree_saver

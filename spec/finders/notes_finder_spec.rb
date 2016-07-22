@@ -11,7 +11,7 @@ describe NotesFinder do
     project.team << [user, :master]
   end
 
-  describe :execute do
+  describe '#execute' do
     let(:params)  { { target_id: commit.id, target_type: 'commit', last_fetched_at: 1.hour.ago.to_i } }
 
     before do
@@ -47,6 +47,13 @@ describe NotesFinder do
 
       it 'raises an error if user can not see the issue' do
         user = create(:user)
+        expect { NotesFinder.new.execute(project, user, params) }.to raise_error(ActiveRecord::RecordNotFound)
+      end
+
+      it 'raises an error for project members with guest role' do
+        user = create(:user)
+        project.team << [user, :guest]
+
         expect { NotesFinder.new.execute(project, user, params) }.to raise_error(ActiveRecord::RecordNotFound)
       end
     end

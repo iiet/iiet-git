@@ -96,7 +96,6 @@ class Settings < Settingslogic
   end
 end
 
-
 # Default settings
 Settings['ldap'] ||= Settingslogic.new({})
 Settings.ldap['enabled'] = false if Settings.ldap['enabled'].nil?
@@ -123,7 +122,6 @@ if Settings.ldap['enabled'] || Rails.env.test?
     server['provider_class'] = OmniAuth::Utils.camelize(server['provider_name'])
   end
 end
-
 
 Settings['omniauth'] ||= Settingslogic.new({})
 Settings.omniauth['enabled'] = false if Settings.omniauth['enabled'].nil?
@@ -213,11 +211,9 @@ Settings.gitlab.default_projects_features['snippets']           = false if Setti
 Settings.gitlab.default_projects_features['builds']             = true if Settings.gitlab.default_projects_features['builds'].nil?
 Settings.gitlab.default_projects_features['container_registry'] = true if Settings.gitlab.default_projects_features['container_registry'].nil?
 Settings.gitlab.default_projects_features['visibility_level']   = Settings.send(:verify_constant, Gitlab::VisibilityLevel, Settings.gitlab.default_projects_features['visibility_level'], Gitlab::VisibilityLevel::PRIVATE)
-Settings.gitlab['repository_downloads_path'] = File.join(Settings.shared['path'], 'cache/archive') if Settings.gitlab['repository_downloads_path'].nil?
-Settings.gitlab['restricted_signup_domains'] ||= []
+Settings.gitlab['domain_whitelist'] ||= []
 Settings.gitlab['import_sources'] ||= %w[github bitbucket gitlab gitorious google_code fogbugz git gitlab_project]
 Settings.gitlab['trusted_proxies'] ||= []
-
 
 #
 # CI
@@ -304,12 +300,34 @@ Settings.gitlab_shell['hooks_path']   ||= Settings.gitlab['user_home'] + '/gitla
 Settings.gitlab_shell['secret_file'] ||= Rails.root.join('.gitlab_shell_secret')
 Settings.gitlab_shell['receive_pack']   = true if Settings.gitlab_shell['receive_pack'].nil?
 Settings.gitlab_shell['upload_pack']    = true if Settings.gitlab_shell['upload_pack'].nil?
-Settings.gitlab_shell['repos_path']   ||= Settings.gitlab['user_home'] + '/repositories/'
 Settings.gitlab_shell['ssh_host']     ||= Settings.gitlab.ssh_host
 Settings.gitlab_shell['ssh_port']     ||= 22
 Settings.gitlab_shell['ssh_user']     ||= Settings.gitlab.user
 Settings.gitlab_shell['owner_group']  ||= Settings.gitlab.user
 Settings.gitlab_shell['ssh_path_prefix'] ||= Settings.send(:build_gitlab_shell_ssh_path_prefix)
+
+#
+# Repositories
+#
+Settings['repositories'] ||= Settingslogic.new({})
+Settings.repositories['storages'] ||= {}
+# Setting gitlab_shell.repos_path is DEPRECATED and WILL BE REMOVED in version 9.0
+Settings.repositories.storages['default'] ||= Settings.gitlab_shell['repos_path'] || Settings.gitlab['user_home'] + '/repositories/'
+
+#
+# The repository_downloads_path is used to remove outdated repository
+# archives, if someone has it configured incorrectly, and it points
+# to the path where repositories are stored this can cause some
+# data-integrity issue. In this case, we sets it to the default
+# repository_downloads_path value.
+#
+repositories_storages_path     = Settings.repositories.storages.values
+repository_downloads_path      = Settings.gitlab['repository_downloads_path'].to_s.gsub(/\/$/, '')
+repository_downloads_full_path = File.expand_path(repository_downloads_path, Settings.gitlab['user_home'])
+
+if repository_downloads_path.blank? || repositories_storages_path.any? { |path| [repository_downloads_path, repository_downloads_full_path].include?(path.gsub(/\/$/, '')) }
+  Settings.gitlab['repository_downloads_path'] = File.join(Settings.shared['path'], 'cache/archive')
+end
 
 #
 # Backup
@@ -340,7 +358,6 @@ Settings.git['timeout']   ||= 10
 # db/migrate/20151023144219_remove_satellites.rb
 Settings['satellites'] ||= Settingslogic.new({})
 Settings.satellites['path'] = File.expand_path(Settings.satellites['path'] || "tmp/repo_satellites/", Rails.root)
-
 
 #
 # Extra customization

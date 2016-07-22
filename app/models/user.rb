@@ -15,7 +15,7 @@ class User < ActiveRecord::Base
   add_authentication_token_field :authentication_token
 
   default_value_for :admin, false
-  default_value_for :external, false
+  default_value_for(:external) { current_application_settings.user_default_external }
   default_value_for :can_create_group, gitlab_config.default_can_create_group
   default_value_for :can_create_team, false
   default_value_for :hide_no_ssh_key, false
@@ -85,9 +85,10 @@ class User < ActiveRecord::Base
   has_one  :abuse_report,             dependent: :destroy
   has_many :spam_logs,                dependent: :destroy
   has_many :builds,                   dependent: :nullify, class_name: 'Ci::Build'
+  has_many :pipelines,                dependent: :nullify, class_name: 'Ci::Pipeline'
   has_many :todos,                    dependent: :destroy
   has_many :notification_settings,    dependent: :destroy
-  has_many :award_emoji,              as: :awardable, dependent: :destroy
+  has_many :award_emoji,              dependent: :destroy
 
   #
   # Validations
@@ -110,7 +111,7 @@ class User < ActiveRecord::Base
   validates :avatar, file_size: { maximum: 200.kilobytes.to_i }
 
   before_validation :generate_password, on: :create
-  before_validation :restricted_signup_domains, on: :create
+  before_validation :signup_domain_valid?, on: :create
   before_validation :sanitize_attrs
   before_validation :set_notification_email, if: ->(user) { user.email_changed? }
   before_validation :set_public_email, if: ->(user) { user.public_email_changed? }
@@ -309,7 +310,7 @@ class User < ActiveRecord::Base
 
   def generate_password
     if self.force_random_password
-      self.password = self.password_confirmation = Devise.friendly_token.first(8)
+      self.password = self.password_confirmation = Devise.friendly_token.first(Devise.password_length.min)
     end
   end
 
@@ -411,6 +412,8 @@ class User < ActiveRecord::Base
   end
 
   # Returns projects user is authorized to access.
+  #
+  # If you change the logic of this method, please also update `Project#authorized_for_user`
   def authorized_projects(min_access_level = nil)
     Project.where("projects.id IN (#{projects_union(min_access_level).to_sql})")
   end
@@ -653,7 +656,7 @@ class User < ActiveRecord::Base
   end
 
   def avatar_url(size = nil, scale = 2)
-    if avatar.present?
+    if self[:avatar].present?
       [gitlab_config.url, avatar.url].join
     else
       GravatarService.new.execute(email, size, scale)
@@ -759,29 +762,6 @@ class User < ActiveRecord::Base
     Project.where(id: events)
   end
 
-  def restricted_signup_domains
-    email_domains = current_application_settings.restricted_signup_domains
-
-    unless email_domains.blank?
-      match_found = email_domains.any? do |domain|
-        escaped = Regexp.escape(domain).gsub('\*','.*?')
-        regexp = Regexp.new "^#{escaped}$", Regexp::IGNORECASE
-        email_domain = Mail::Address.new(self.email).domain
-        email_domain =~ regexp
-      end
-
-      unless match_found
-        self.errors.add :email,
-                        'is not whitelisted. ' +
-                        'Email domains valid for registration are: ' +
-                        email_domains.join(', ')
-        return false
-      end
-    end
-
-    true
-  end
-
   def can_be_removed?
     !solo_owned_groups.present?
   end
@@ -852,9 +832,8 @@ class User < ActiveRecord::Base
                  projects.select(:id),
                  groups.joins(:shared_projects).select(:project_id)]
 
-
     if min_access_level
-      scope = { access_level: Gitlab::Access.values.select { |access| access >= min_access_level } }
+      scope = { access_level: Gitlab::Access.all_values.select { |access| access >= min_access_level } }
       relations = [relations.shift] + relations.map { |relation| relation.where(members: scope) }
     end
 
@@ -880,5 +859,41 @@ class User < ActiveRecord::Base
 
     self.can_create_group   = false
     self.projects_limit     = 0
+  end
+
+  def signup_domain_valid?
+    valid = true
+    error = nil
+
+    if current_application_settings.domain_blacklist_enabled?
+      blocked_domains = current_application_settings.domain_blacklist
+      if domain_matches?(blocked_domains, self.email)
+        error = 'is not from an allowed domain.'
+        valid = false
+      end
+    end
+
+    allowed_domains = current_application_settings.domain_whitelist
+    unless allowed_domains.blank?
+      if domain_matches?(allowed_domains, self.email)
+        valid = true
+      else
+        error = "is not whitelisted. Email domains valid for registration are: #{allowed_domains.join(', ')}"
+        valid = false
+      end
+    end
+
+    self.errors.add(:email, error) unless valid
+
+    valid
+  end
+
+  def domain_matches?(email_domains, email)
+    signup_domain = Mail::Address.new(email).domain
+    email_domains.any? do |domain|
+      escaped = Regexp.escape(domain).gsub('\*', '.*?')
+      regexp = Regexp.new "^#{escaped}$", Regexp::IGNORECASE
+      signup_domain =~ regexp
+    end
   end
 end

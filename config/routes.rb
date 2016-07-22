@@ -89,10 +89,10 @@ Rails.application.routes.draw do
   mount Grack::AuthSpawner, at: '/', constraints: lambda { |request| /[-\/\w\.]+\.git\/(info\/lfs|gitlab-lfs)/.match(request.path_info) }, via: [:get, :post, :put]
 
   # Help
-  get 'help'                  => 'help#index'
-  get 'help/:category/:file'  => 'help#show', as: :help_page, constraints: { category: /.*/, file: /[^\/\.]+/ }
-  get 'help/shortcuts'
-  get 'help/ui' => 'help#ui'
+  get 'help'           => 'help#index'
+  get 'help/shortcuts' => 'help#shortcuts'
+  get 'help/ui'        => 'help#ui'
+  get 'help/*path'     => 'help#show', as: :help_page
 
   #
   # Global snippets
@@ -133,12 +133,12 @@ Rails.application.routes.draw do
   #
   resources :notification_settings, only: [:create, :update]
 
-
   #
   # Import
   #
   namespace :import do
     resource :github, only: [:create, :new], controller: :github do
+      post :personal_access_token
       get :status
       get :callback
       get :jobs
@@ -280,6 +280,7 @@ Rails.application.routes.draw do
     resource :logs, only: [:show]
     resource :health_check, controller: 'health_check', only: [:show]
     resource :background_jobs, controller: 'background_jobs', only: [:show]
+    resource :system_info, controller: 'system_info', only: [:show]
 
     resources :namespaces, path: '/projects', constraints: { id: /[a-zA-Z.0-9_\-]+/ }, only: [] do
       root to: 'projects#index', as: :projects
@@ -464,7 +465,6 @@ Rails.application.routes.draw do
   resources :namespaces, path: '/', constraints: { id: /[a-zA-Z.0-9_\-]+/ }, only: [] do
     resources(:projects, constraints: { id: /[a-zA-Z.0-9_\-]+(?<!\.atom)/ }, except:
               [:new, :create, :index], path: "/") do
-
       member do
         put :transfer
         delete :remove_fork
@@ -615,10 +615,18 @@ Rails.application.routes.draw do
             post :retry_builds
             post :revert
             post :cherry_pick
+            get :diff_for_path
           end
         end
 
-        resources :compare, only: [:index, :create]
+        resources :compare, only: [:index, :create] do
+          collection do
+            get :diff_for_path
+          end
+        end
+
+        get '/compare/:from...:to', to: 'compare#show', as: 'compare', constraints: { from: /.+/, to: /.+/ }
+
         resources :network, only: [:show], constraints: { id: /(?:[^.]|\.(?!json$))+/, format: /json/ }
 
         resources :graphs, only: [:show], constraints: { id: /(?:[^.]|\.(?!json$))+/, format: /json/ } do
@@ -628,9 +636,6 @@ Rails.application.routes.draw do
             get :languages
           end
         end
-
-        get '/compare/:from...:to' => 'compare#show', :as => 'compare',
-            :constraints => { from: /.+/, to: /.+/ }
 
         resources :snippets, constraints: { id: /\d+/ } do
           member do
@@ -652,7 +657,7 @@ Rails.application.routes.draw do
           get '/wikis/*id', to: 'wikis#show', as: 'wiki', constraints: WIKI_SLUG_ID
           delete '/wikis/*id', to: 'wikis#destroy', constraints: WIKI_SLUG_ID
           put '/wikis/*id', to: 'wikis#update', constraints: WIKI_SLUG_ID
-          post '/wikis/*id/markdown_preview', to:'wikis#markdown_preview', constraints: WIKI_SLUG_ID, as: 'wiki_markdown_preview'
+          post '/wikis/*id/markdown_preview', to: 'wikis#markdown_preview', constraints: WIKI_SLUG_ID, as: 'wiki_markdown_preview'
         end
 
         resource :repository, only: [:show, :create] do
@@ -706,12 +711,14 @@ Rails.application.routes.draw do
             post :toggle_subscription
             post :toggle_award_emoji
             post :remove_wip
+            get :diff_for_path
           end
 
           collection do
             get :branch_from
             get :branch_to
             get :update_branches
+            get :diff_for_path
           end
         end
 
@@ -720,11 +727,15 @@ Rails.application.routes.draw do
           resource :release, only: [:edit, :update]
         end
 
-        resources :protected_branches, only: [:index, :create, :update, :destroy], constraints: { id: Gitlab::Regex.git_reference_regex }
+        resources :protected_branches, only: [:index, :show, :create, :update, :destroy], constraints: { id: Gitlab::Regex.git_reference_regex }
         resources :variables, only: [:index, :show, :update, :create, :destroy]
         resources :triggers, only: [:index, :create, :destroy]
 
         resources :pipelines, only: [:index, :new, :create, :show] do
+          collection do
+            resource :pipelines_settings, path: 'settings', only: [:show, :update]
+          end
+
           member do
             post :cancel
             post :retry
@@ -742,6 +753,7 @@ Rails.application.routes.draw do
             get :status
             post :cancel
             post :retry
+            post :play
             post :erase
             get :trace
             get :raw

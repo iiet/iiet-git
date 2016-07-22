@@ -64,6 +64,7 @@ class Admin::ApplicationSettingsController < Admin::ApplicationController
     params[:application_setting][:disabled_oauth_sign_in_sources] =
       AuthHelper.button_based_providers.map(&:to_s) -
       Array(enabled_oauth_sign_in_sources)
+    params.delete(:domain_blacklist_raw) if params[:domain_blacklist_file]
 
     params.require(:application_setting).permit(
       :default_projects_limit,
@@ -83,10 +84,14 @@ class Admin::ApplicationSettingsController < Admin::ApplicationController
       :default_project_visibility,
       :default_snippet_visibility,
       :default_group_visibility,
-      :restricted_signup_domains_raw,
+      :domain_whitelist_raw,
+      :domain_blacklist_enabled,
+      :domain_blacklist_raw,
+      :domain_blacklist_file,
       :version_check_enabled,
       :admin_notification_email,
       :user_oauth_applications,
+      :user_default_external,
       :shared_runners_enabled,
       :shared_runners_text,
       :max_artifacts_size,
@@ -109,6 +114,8 @@ class Admin::ApplicationSettingsController < Admin::ApplicationController
       :metrics_packet_size,
       :send_user_confirmation_email,
       :container_registry_token_expire_delay,
+      :repository_storage,
+      :enabled_git_access_protocol,
       restricted_visibility_levels: [],
       import_sources: [],
       disabled_oauth_sign_in_sources: []

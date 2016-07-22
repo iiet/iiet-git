@@ -54,6 +54,10 @@
         }
       }
 
+      code {
+        white-space: pre-wrap;
+      }
+
       pre {
         border: none;
         background: #f9f9f9;
@@ -172,3 +176,11 @@
     }
   }
 }
+
+// hide event scope (namespace + project) where it is not necessary
+.project-activity {
+  .event-scope {
+    display: none;
+  }
+}
+

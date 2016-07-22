@@ -4,7 +4,8 @@ class ProjectsController < Projects::ApplicationController
   before_action :authenticate_user!, except: [:show, :activity, :refs]
   before_action :project, except: [:new, :create]
   before_action :repository, except: [:new, :create]
-  before_action :assign_ref_vars, :tree, only: [:show], if: :repo_exists?
+  before_action :assign_ref_vars, only: [:show], if: :repo_exists?
+  before_action :tree, only: [:show], if: [:repo_exists?, :project_view_files?]
 
   # Authorize
   before_action :authorize_admin_project!, only: [:edit, :update, :housekeeping, :download_export, :export, :remove_export, :generate_new_export]
@@ -52,11 +53,11 @@ class ProjectsController < Projects::ApplicationController
             notice: "Project '#{@project.name}' was successfully updated."
           )
         end
-        format.js
       else
         format.html { render 'edit' }
-        format.js
       end
+
+      format.js
     end
   end
 
@@ -295,12 +296,16 @@ class ProjectsController < Projects::ApplicationController
       :issues_tracker_id, :default_branch,
       :wiki_enabled, :visibility_level, :import_url, :last_activity_at, :namespace_id, :avatar,
       :builds_enabled, :build_allow_git_fetch, :build_timeout_in_minutes, :build_coverage_regex,
-      :public_builds, :only_allow_merge_if_build_succeeds
+      :public_builds, :only_allow_merge_if_build_succeeds, :request_access_enabled
     )
   end
 
   def repo_exists?
     project.repository_exists? && !project.empty_repo?
+  end
+
+  def project_view_files?
+    current_user && current_user.project_view == 'files'
   end
 
   # Override extract_ref from ExtractsPath, which returns the branch and file path

@@ -16,6 +16,15 @@
   font-weight: normal;
   font-size: 16px;
   line-height: 36px;
+
+  &.diff-collapsed {
+    padding: 5px;
+    cursor: pointer;
+
+    &:hover {
+      background-color: $row-hover;
+    }
+  }
 }
 
 .row-content-block {
@@ -137,7 +146,7 @@
     margin: 0;
     font-size: 24px;
     font-weight: normal;
-    margin-bottom: 5px;
+    margin-bottom: 10px;
     color: #4c4e54;
     font-size: 23px;
     line-height: 1.1;
@@ -223,7 +232,9 @@
 .nav-block {
   .controls {
     float: right;
-    margin-top: 11px;
+    margin-top: 8px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid $border-color;
   }
 }
 

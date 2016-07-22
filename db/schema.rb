@@ -11,7 +11,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20160703180340) do
+ActiveRecord::Schema.define(version: 20160721081015) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -49,7 +49,7 @@ ActiveRecord::Schema.define(version: 20160703180340) do
     t.integer  "max_attachment_size",                   default: 10,          null: false
     t.integer  "default_project_visibility"
     t.integer  "default_snippet_visibility"
-    t.text     "restricted_signup_domains"
+    t.text     "domain_whitelist"
     t.boolean  "user_oauth_applications",               default: true
     t.string   "after_sign_out_path"
     t.integer  "session_expire_delay",                  default: 10080,       null: false
@@ -84,7 +84,12 @@ ActiveRecord::Schema.define(version: 20160703180340) do
     t.string   "health_check_access_token"
     t.boolean  "send_user_confirmation_email",          default: false
     t.integer  "container_registry_token_expire_delay", default: 5
+    t.boolean  "user_default_external",                 default: false,        null: false
     t.text     "after_sign_up_text"
+    t.string   "repository_storage",                    default: "default"
+    t.string   "enabled_git_access_protocol"
+    t.boolean  "domain_blacklist_enabled",              default: false
+    t.text     "domain_blacklist"
   end
 
   create_table "audit_events", force: :cascade do |t|
@@ -164,6 +169,9 @@ ActiveRecord::Schema.define(version: 20160703180340) do
     t.datetime "erased_at"
     t.string   "environment"
     t.datetime "artifacts_expire_at"
+    t.integer  "artifacts_size"
+    t.string   "when"
+    t.text     "yaml_variables"
   end
 
   add_index "ci_builds", ["commit_id", "stage_idx", "created_at"], name: "index_ci_builds_on_commit_id_and_stage_idx_and_created_at", using: :btree
@@ -195,6 +203,7 @@ ActiveRecord::Schema.define(version: 20160703180340) do
     t.datetime "started_at"
     t.datetime "finished_at"
     t.integer  "duration"
+    t.integer  "user_id"
   end
 
   add_index "ci_commits", ["gl_project_id", "sha"], name: "index_ci_commits_on_gl_project_id_and_sha", using: :btree
@@ -206,6 +215,7 @@ ActiveRecord::Schema.define(version: 20160703180340) do
   add_index "ci_commits", ["project_id"], name: "index_ci_commits_on_project_id", using: :btree
   add_index "ci_commits", ["sha"], name: "index_ci_commits_on_sha", using: :btree
   add_index "ci_commits", ["status"], name: "index_ci_commits_on_status", using: :btree
+  add_index "ci_commits", ["user_id"], name: "index_ci_commits_on_user_id", using: :btree
 
   create_table "ci_events", force: :cascade do |t|
     t.integer  "project_id"
@@ -590,6 +600,8 @@ ActiveRecord::Schema.define(version: 20160703180340) do
     t.datetime "updated_at"
     t.string   "base_commit_sha"
     t.string   "real_size"
+    t.string   "head_commit_sha"
+    t.string   "start_commit_sha"
   end
 
   add_index "merge_request_diffs", ["merge_request_id"], name: "index_merge_request_diffs_on_merge_request_id", unique: true, using: :btree
@@ -618,8 +630,8 @@ ActiveRecord::Schema.define(version: 20160703180340) do
     t.integer  "merge_user_id"
     t.string   "merge_commit_sha"
     t.datetime "deleted_at"
+    t.string   "in_progress_merge_commit_sha"
   end
-
   add_index "merge_requests", ["assignee_id"], name: "index_merge_requests_on_assignee_id", using: :btree
   add_index "merge_requests", ["author_id"], name: "index_merge_requests_on_author_id", using: :btree
   add_index "merge_requests", ["created_at", "id"], name: "index_merge_requests_on_created_at_and_id", using: :btree
@@ -654,16 +666,17 @@ ActiveRecord::Schema.define(version: 20160703180340) do
   add_index "milestones", ["title"], name: "index_milestones_on_title_trigram", using: :gin, opclasses: {"title"=>"gin_trgm_ops"}
 
   create_table "namespaces", force: :cascade do |t|
-    t.string   "name",                                  null: false
-    t.string   "path",                                  null: false
+    t.string   "name",                                   null: false
+    t.string   "path",                                   null: false
     t.integer  "owner_id"
     t.datetime "created_at"
     t.datetime "updated_at"
     t.string   "type"
-    t.string   "description",           default: "",    null: false
+    t.string   "description",            default: "",    null: false
     t.string   "avatar"
-    t.boolean  "share_with_group_lock", default: false
-    t.integer  "visibility_level",      default: 20,    null: false
+    t.boolean  "share_with_group_lock",  default: false
+    t.integer  "visibility_level",       default: 20,    null: false
+    t.boolean  "request_access_enabled", default: true,  null: false
   end
 
   add_index "namespaces", ["created_at", "id"], name: "index_namespaces_on_created_at_and_id", using: :btree
@@ -686,10 +699,12 @@ ActiveRecord::Schema.define(version: 20160703180340) do
     t.string   "line_code"
     t.string   "commit_id"
     t.integer  "noteable_id"
-    t.boolean  "system",        default: false, null: false
+    t.boolean  "system",            default: false, null: false
     t.text     "st_diff"
     t.integer  "updated_by_id"
     t.string   "type"
+    t.text     "position"
+    t.text     "original_position"
   end
 
   add_index "notes", ["author_id"], name: "index_notes_on_author_id", using: :btree
@@ -797,38 +812,41 @@ ActiveRecord::Schema.define(version: 20160703180340) do
     t.datetime "created_at"
     t.datetime "updated_at"
     t.integer  "creator_id"
-    t.boolean  "issues_enabled",                     default: true,  null: false
-    t.boolean  "merge_requests_enabled",             default: true,  null: false
-    t.boolean  "wiki_enabled",                       default: true,  null: false
+    t.boolean  "issues_enabled",                     default: true,      null: false
+    t.boolean  "merge_requests_enabled",             default: true,      null: false
+    t.boolean  "wiki_enabled",                       default: true,      null: false
     t.integer  "namespace_id"
-    t.boolean  "snippets_enabled",                   default: true,  null: false
+    t.boolean  "snippets_enabled",                   default: true,      null: false
     t.datetime "last_activity_at"
     t.string   "import_url"
-    t.integer  "visibility_level",                   default: 0,     null: false
-    t.boolean  "archived",                           default: false, null: false
+    t.integer  "visibility_level",                   default: 0,         null: false
+    t.boolean  "archived",                           default: false,     null: false
     t.string   "avatar"
     t.string   "import_status"
     t.float    "repository_size",                    default: 0.0
-    t.integer  "star_count",                         default: 0,     null: false
+    t.integer  "star_count",                         default: 0,         null: false
     t.string   "import_type"
     t.string   "import_source"
     t.integer  "commit_count",                       default: 0
     t.text     "import_error"
     t.integer  "ci_id"
-    t.boolean  "builds_enabled",                     default: true,  null: false
-    t.boolean  "shared_runners_enabled",             default: true,  null: false
+    t.boolean  "builds_enabled",                     default: true,      null: false
+    t.boolean  "shared_runners_enabled",             default: true,      null: false
     t.string   "runners_token"
     t.string   "build_coverage_regex"
-    t.boolean  "build_allow_git_fetch",              default: true,  null: false
-    t.integer  "build_timeout",                      default: 3600,  null: false
+    t.boolean  "build_allow_git_fetch",              default: true,      null: false
+    t.integer  "build_timeout",                      default: 3600,      null: false
     t.boolean  "pending_delete",                     default: false
-    t.boolean  "public_builds",                      default: true,  null: false
+    t.boolean  "public_builds",                      default: true,      null: false
     t.integer  "pushes_since_gc",                    default: 0
     t.boolean  "last_repository_check_failed"
     t.datetime "last_repository_check_at"
     t.boolean  "container_registry_enabled"
-    t.boolean  "only_allow_merge_if_build_succeeds", default: false, null: false
+    t.boolean  "only_allow_merge_if_build_succeeds", default: false,     null: false
     t.boolean  "has_external_issue_tracker"
+    t.string   "repository_storage",                 default: "default", null: false
+    t.boolean  "has_external_wiki"
+    t.boolean  "request_access_enabled",             default: true,      null: false
   end
 
   add_index "projects", ["builds_enabled", "shared_runners_enabled"], name: "index_projects_on_builds_enabled_and_shared_runners_enabled", using: :btree
@@ -849,11 +867,12 @@ ActiveRecord::Schema.define(version: 20160703180340) do
   add_index "projects", ["visibility_level"], name: "index_projects_on_visibility_level", using: :btree
 
   create_table "protected_branches", force: :cascade do |t|
-    t.integer  "project_id",                          null: false
-    t.string   "name",                                null: false
+    t.integer  "project_id",                           null: false
+    t.string   "name",                                 null: false
     t.datetime "created_at"
     t.datetime "updated_at"
-    t.boolean  "developers_can_push", default: false, null: false
+    t.boolean  "developers_can_push",  default: false, null: false
+    t.boolean  "developers_can_merge", default: false, null: false
   end
 
   add_index "protected_branches", ["project_id"], name: "index_protected_branches_on_project_id", using: :btree
@@ -877,6 +896,8 @@ ActiveRecord::Schema.define(version: 20160703180340) do
     t.string  "commit_id"
     t.string  "reply_key",     null: false
     t.string  "line_code"
+    t.string  "note_type"
+    t.text    "position"
   end
 
   add_index "sent_notifications", ["reply_key"], name: "index_sent_notifications_on_reply_key", unique: true, using: :btree

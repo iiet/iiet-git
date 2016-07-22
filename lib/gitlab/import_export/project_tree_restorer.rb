@@ -1,7 +1,6 @@
 module Gitlab
   module ImportExport
     class ProjectTreeRestorer
-
       def initialize(user:, shared:, project:)
         @path = File.join(shared.export_path, 'project.json')
         @user = user
@@ -13,7 +12,10 @@ module Gitlab
         json = IO.read(@path)
         @tree_hash = ActiveSupport::JSON.decode(json)
         @project_members = @tree_hash.delete('project_members')
-        create_relations
+
+        ActiveRecord::Base.no_touching do
+          create_relations
+        end
       rescue => e
         @shared.error(e)
         false

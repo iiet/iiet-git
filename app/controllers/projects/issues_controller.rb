@@ -76,7 +76,6 @@ class Projects::IssuesController < Projects::ApplicationController
         render json: @issue.to_json(include: [:milestone, :labels])
       end
     end
-
   end
 
   def create
@@ -115,6 +114,7 @@ class Projects::IssuesController < Projects::ApplicationController
           render :edit
         end
       end
+
       format.json do
         render json: @issue.to_json(include: { milestone: {}, assignee: { methods: :avatar_url }, labels: { methods: :text_color } })
       end
@@ -226,6 +226,7 @@ class Projects::IssuesController < Projects::ApplicationController
       :assignee_id,
       :milestone_id,
       :state_event,
+      :subscription_event,
       label_ids: [],
       add_label_ids: [],
       remove_label_ids: []

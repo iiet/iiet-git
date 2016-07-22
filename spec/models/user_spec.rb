@@ -31,6 +31,8 @@ describe User, models: true do
     it { is_expected.to have_many(:spam_logs).dependent(:destroy) }
     it { is_expected.to have_many(:todos).dependent(:destroy) }
     it { is_expected.to have_many(:award_emoji).dependent(:destroy) }
+    it { is_expected.to have_many(:builds).dependent(:nullify) }
+    it { is_expected.to have_many(:pipelines).dependent(:nullify) }
 
     describe '#group_members' do
       it 'does not include group memberships for which user is a requester' do
@@ -87,9 +89,9 @@ describe User, models: true do
     end
 
     describe 'email' do
-      context 'when no signup domains listed' do
+      context 'when no signup domains whitelisted' do
         before do
-          allow_any_instance_of(ApplicationSetting).to receive(:restricted_signup_domains).and_return([])
+          allow_any_instance_of(ApplicationSetting).to receive(:domain_whitelist).and_return([])
         end
 
         it 'accepts any email' do
@@ -98,9 +100,9 @@ describe User, models: true do
         end
       end
 
-      context 'when a signup domain is listed and subdomains are allowed' do
+      context 'when a signup domain is whitelisted and subdomains are allowed' do
         before do
-          allow_any_instance_of(ApplicationSetting).to receive(:restricted_signup_domains).and_return(['example.com', '*.example.com'])
+          allow_any_instance_of(ApplicationSetting).to receive(:domain_whitelist).and_return(['example.com', '*.example.com'])
         end
 
         it 'accepts info@example.com' do
@@ -119,9 +121,9 @@ describe User, models: true do
         end
       end
 
-      context 'when a signup domain is listed and subdomains are not allowed' do
+      context 'when a signup domain is whitelisted and subdomains are not allowed' do
         before do
-          allow_any_instance_of(ApplicationSetting).to receive(:restricted_signup_domains).and_return(['example.com'])
+          allow_any_instance_of(ApplicationSetting).to receive(:domain_whitelist).and_return(['example.com'])
         end
 
         it 'accepts info@example.com' do
@@ -137,6 +139,53 @@ describe User, models: true do
         it 'rejects example@test.com' do
           user = build(:user, email: "example@test.com")
           expect(user).to be_invalid
+        end
+      end
+
+      context 'domain blacklist' do
+        before do
+          allow_any_instance_of(ApplicationSetting).to receive(:domain_blacklist_enabled?).and_return(true)
+          allow_any_instance_of(ApplicationSetting).to receive(:domain_blacklist).and_return(['example.com'])
+        end
+
+        context 'when a signup domain is blacklisted' do
+          it 'accepts info@test.com' do
+            user = build(:user, email: 'info@test.com')
+            expect(user).to be_valid
+          end
+
+          it 'rejects info@example.com' do
+            user = build(:user, email: 'info@example.com')
+            expect(user).not_to be_valid
+          end
+        end
+
+        context 'when a signup domain is blacklisted but a wildcard subdomain is allowed' do
+          before do
+            allow_any_instance_of(ApplicationSetting).to receive(:domain_blacklist).and_return(['test.example.com'])
+            allow_any_instance_of(ApplicationSetting).to receive(:domain_whitelist).and_return(['*.example.com'])
+          end
+
+          it 'should give priority to whitelist and allow info@test.example.com' do
+            user = build(:user, email: 'info@test.example.com')
+            expect(user).to be_valid
+          end
+        end
+
+        context 'with both lists containing a domain' do
+          before do
+            allow_any_instance_of(ApplicationSetting).to receive(:domain_whitelist).and_return(['test.com'])
+          end
+
+          it 'accepts info@test.com' do
+            user = build(:user, email: 'info@test.com')
+            expect(user).to be_valid
+          end
+
+          it 'rejects info@example.com' do
+            user = build(:user, email: 'info@example.com')
+            expect(user).not_to be_valid
+          end
         end
       end
 
@@ -427,7 +476,7 @@ describe User, models: true do
     end
   end
 
-  describe :not_in_project do
+  describe '.not_in_project' do
     before do
       User.delete_all
       @user = create :user
@@ -446,6 +495,7 @@ describe User, models: true do
       it { expect(user.can_create_group?).to be_truthy }
       it { expect(user.can_create_project?).to be_truthy }
       it { expect(user.first_name).to eq('John') }
+      it { expect(user.external).to be_falsey }
     end
 
     describe 'with defaults' do
@@ -466,6 +516,26 @@ describe User, models: true do
         expect(user.projects_limit).to eq(123)
         expect(user.can_create_group).to be_falsey
         expect(user.theme_id).to eq(1)
+      end
+    end
+
+    context 'when current_application_settings.user_default_external is true' do
+      before do
+        stub_application_setting(user_default_external: true)
+      end
+
+      it "creates external user by default" do
+        user = build(:user)
+
+        expect(user.external).to be_truthy
+      end
+
+      describe 'with default overrides' do
+        it "creates a non-external user" do
+          user = build(:user, external: false)
+
+          expect(user.external).to be_falsey
+        end
       end
     end
   end
@@ -577,7 +647,7 @@ describe User, models: true do
     end
   end
 
-  describe :avatar_type do
+  describe '#avatar_type' do
     let(:user) { create(:user) }
 
     it "should be true if avatar is image" do
@@ -591,7 +661,7 @@ describe User, models: true do
     end
   end
 
-  describe :requires_ldap_check? do
+  describe '#requires_ldap_check?' do
     let(:user) { User.new }
 
     it 'is false when LDAP is disabled' do
@@ -630,7 +700,7 @@ describe User, models: true do
   end
 
   context 'ldap synchronized user' do
-    describe :ldap_user? do
+    describe '#ldap_user?' do
       it 'is true if provider name starts with ldap' do
         user = create(:omniauth_user, provider: 'ldapmain')
         expect(user.ldap_user?).to be_truthy
@@ -647,7 +717,7 @@ describe User, models: true do
       end
     end
 
-    describe :ldap_identity do
+    describe '#ldap_identity' do
       it 'returns ldap identity' do
         user = create :omniauth_user
         expect(user.ldap_identity.provider).not_to be_empty
@@ -804,7 +874,7 @@ describe User, models: true do
     end
   end
 
-  describe :can_be_removed? do
+  describe '#can_be_removed?' do
     subject { create(:user) }
 
     context 'no owned groups' do
@@ -864,16 +934,25 @@ describe User, models: true do
   end
 
   describe '#authorized_projects' do
-    let!(:user) { create(:user) }
-    let!(:private_project) { create(:project, :private) }
+    context 'with a minimum access level' do
+      it 'includes projects for which the user is an owner' do
+        user = create(:user)
+        project = create(:empty_project, :private, namespace: user.namespace)
 
-    before do
-      private_project.team << [user, Gitlab::Access::MASTER]
+        expect(user.authorized_projects(Gitlab::Access::REPORTER))
+          .to contain_exactly(project)
+      end
+
+      it 'includes projects for which the user is a master' do
+        user = create(:user)
+        project = create(:empty_project, :private)
+
+        project.team << [user, Gitlab::Access::MASTER]
+
+        expect(user.authorized_projects(Gitlab::Access::REPORTER))
+          .to contain_exactly(project)
+      end
     end
-
-    subject { user.authorized_projects }
-
-    it { is_expected.to eq([private_project]) }
   end
 
   describe '#ci_authorized_runners' do

@@ -14,7 +14,6 @@ describe GitPushService, services: true do
   end
 
   describe 'Push branches' do
-
     let(:oldrev) { @oldrev }
     let(:newrev) { @newrev }
 
@@ -23,7 +22,6 @@ describe GitPushService, services: true do
     end
 
     context 'new branch' do
-
       let(:oldrev) { @blankrev }
 
       it { is_expected.to be_truthy }
@@ -40,10 +38,21 @@ describe GitPushService, services: true do
 
         subject
       end
+
+      it 'flushes the branches cache' do
+        expect(project.repository).to receive(:expire_branches_cache)
+
+        subject
+      end
+
+      it 'flushes the branch count cache' do
+        expect(project.repository).to receive(:expire_branch_count_cache)
+
+        subject
+      end
     end
 
     context 'existing branch' do
-
       it { is_expected.to be_truthy }
 
       it 'flushes general cached data' do
@@ -52,16 +61,39 @@ describe GitPushService, services: true do
 
         subject
       end
+
+      it 'does not flush the branches cache' do
+        expect(project.repository).not_to receive(:expire_branches_cache)
+
+        subject
+      end
+
+      it 'does not flush the branch count cache' do
+        expect(project.repository).not_to receive(:expire_branch_count_cache)
+
+        subject
+      end
     end
 
     context 'rm branch' do
-
       let(:newrev) { @blankrev }
 
       it { is_expected.to be_truthy }
 
       it 'flushes the visible content cache' do
         expect(project.repository).to receive(:expire_has_visible_content_cache)
+
+        subject
+      end
+
+      it 'flushes the branches cache' do
+        expect(project.repository).to receive(:expire_branches_cache)
+
+        subject
+      end
+
+      it 'flushes the branch count cache' do
+        expect(project.repository).to receive(:expire_branch_count_cache)
 
         subject
       end
@@ -187,13 +219,12 @@ describe GitPushService, services: true do
     end
   end
 
-
   describe "Webhooks" do
     context "execute webhooks" do
       it "when pushing a branch for the first time" do
         expect(project).to receive(:execute_hooks)
         expect(project.default_branch).to eq("master")
-        expect(project.protected_branches).to receive(:create).with({ name: "master", developers_can_push: false })
+        expect(project.protected_branches).to receive(:create).with({ name: "master", developers_can_push: false, developers_can_merge: false })
         execute_service(project, user, @blankrev, 'newrev', 'refs/heads/master' )
       end
 
@@ -211,7 +242,17 @@ describe GitPushService, services: true do
 
         expect(project).to receive(:execute_hooks)
         expect(project.default_branch).to eq("master")
-        expect(project.protected_branches).to receive(:create).with({ name: "master", developers_can_push: true })
+        expect(project.protected_branches).to receive(:create).with({ name: "master", developers_can_push: true, developers_can_merge: false })
+
+        execute_service(project, user, @blankrev, 'newrev', 'refs/heads/master')
+      end
+
+      it "when pushing a branch for the first time with default branch protection set to 'developers can merge'" do
+        stub_application_setting(default_branch_protection: Gitlab::Access::PROTECTION_DEV_CAN_MERGE)
+
+        expect(project).to receive(:execute_hooks)
+        expect(project.default_branch).to eq("master")
+        expect(project.protected_branches).to receive(:create).with({ name: "master", developers_can_push: false, developers_can_merge: true })
         execute_service(project, user, @blankrev, 'newrev', 'refs/heads/master' )
       end
 
@@ -454,7 +495,6 @@ describe GitPushService, services: true do
         execute_service(project, user, @oldrev, @newrev, @ref)
       end
     end
-
 
     it 'increments the push counter' do
       expect(housekeeping).to receive(:increment!)
