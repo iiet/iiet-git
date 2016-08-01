@@ -1,6 +1,16 @@
 Please view this file on the master branch, on stable branches it's out of date.
 
-v 8.10.3 (unreleased)
+v 8.10.4 (unreleased)
+
+v 8.10.3
+  - Fix Import/Export issue importing milestones and labels not associated properly. !5426
+  - Fix timing problems running imports on production. !5523
+  - Add a log message when a project is scheduled for destruction for debugging. !5540
+  - Fix hooks missing on imported GitLab projects. !5549
+  - Properly abort a merge when merge conflicts occur. !5569
+  - Fix importer for GitHub Pull Requests when a branch was removed. !5573
+  - Ignore invalid IPs in X-Forwarded-For when trusted proxies are configured. !5584
+  - Trim extra displayed carriage returns in diffs and files with CRLFs. !5588
 
 v 8.10.2
   - User can now search branches by name. !5144
