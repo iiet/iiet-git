@@ -290,6 +290,15 @@ Settings.cron_jobs['repository_archive_cache_worker']['job_class'] = 'Repository
 Settings.cron_jobs['import_export_project_cleanup_worker'] ||= Settingslogic.new({})
 Settings.cron_jobs['import_export_project_cleanup_worker']['cron'] ||= '0 * * * *'
 Settings.cron_jobs['import_export_project_cleanup_worker']['job_class'] = 'ImportExportProjectCleanupWorker'
+Settings.cron_jobs['requests_profiles_worker'] ||= Settingslogic.new({})
+Settings.cron_jobs['requests_profiles_worker']['cron'] ||= '0 0 * * *'
+Settings.cron_jobs['requests_profiles_worker']['job_class'] = 'RequestsProfilesWorker'
+Settings.cron_jobs['remove_expired_members_worker'] ||= Settingslogic.new({})
+Settings.cron_jobs['remove_expired_members_worker']['cron'] ||= '10 0 * * *'
+Settings.cron_jobs['remove_expired_members_worker']['job_class'] = 'RemoveExpiredMembersWorker'
+Settings.cron_jobs['remove_expired_group_links_worker'] ||= Settingslogic.new({})
+Settings.cron_jobs['remove_expired_group_links_worker']['cron'] ||= '10 0 * * *'
+Settings.cron_jobs['remove_expired_group_links_worker']['job_class'] = 'RemoveExpiredGroupLinksWorker'
 
 #
 # GitLab Shell

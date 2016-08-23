@@ -116,9 +116,16 @@ describe HelpController, "routing" do
     expect(get(path)).to route_to('help#show',
                                   path: 'workflow/protected_branches/protected_branches1',
                                   format: 'png')
-    
+
     path = '/help/ui'
     expect(get(path)).to route_to('help#ui')
+  end
+end
+
+#                      koding GET    /koding(.:format)                      koding#index
+describe KodingController, "routing" do
+  it "to #index" do
+    expect(get("/koding")).to route_to('koding#index')
   end
 end
 
@@ -176,16 +183,8 @@ describe Profiles::KeysController, "routing" do
     expect(post("/profile/keys")).to route_to('profiles/keys#create')
   end
 
-  it "to #edit" do
-    expect(get("/profile/keys/1/edit")).to route_to('profiles/keys#edit', id: '1')
-  end
-
   it "to #show" do
     expect(get("/profile/keys/1")).to route_to('profiles/keys#show', id: '1')
-  end
-
-  it "to #update" do
-    expect(put("/profile/keys/1")).to route_to('profiles/keys#update', id: '1')
   end
 
   it "to #destroy" do

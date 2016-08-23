@@ -1,7 +1,5 @@
-if ENV['SIMPLECOV']
-  require 'simplecov'
-  SimpleCov.start :rails
-end
+require './spec/simplecov_env'
+SimpleCovEnv.start!
 
 ENV["RAILS_ENV"] ||= 'test'
 
@@ -35,6 +33,7 @@ RSpec.configure do |config|
   config.include EmailHelpers
   config.include TestEnv
   config.include ActiveJob::TestHelper
+  config.include ActiveSupport::Testing::TimeHelpers
   config.include StubGitlabCalls
   config.include StubGitlabData
 

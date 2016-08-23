@@ -16,7 +16,7 @@ $border-color:          #e5e5e5;
 $focus-border-color:    #3aabf0;
 $table-border-color:    #f0f0f0;
 $background-color:      #fafafa;
-$dark-background-color: #f7f7f7;
+$dark-background-color: #f5f5f5;
 $table-text-gray:       #8f8f8f;
 
 /*
@@ -43,6 +43,7 @@ $gl-header-color:      $gl-title-color;
 $list-font-size:   $gl-font-size;
 $list-title-color: $gl-title-color;
 $list-text-color:  $gl-text-color;
+$list-text-height: 42px;
 
 /*
  * Markdown
@@ -275,3 +276,5 @@ $personal-access-tokens-disabled-label-color: #bbb;
 
 $ci-output-bg: #1d1f21;
 $ci-text-color: #c5c8c6;
+
+$issue-boards-font-size: 15px;
