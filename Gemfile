@@ -351,5 +351,5 @@ gem 'iiet-accounts-oauth', '= 0.0.1'
 gem 'health_check', '~> 2.1.0'
 
 # System information
-gem 'vmstat', '~> 2.1.1'
+gem 'vmstat', '~> 2.2'
 gem 'sys-filesystem', '~> 1.1.6'

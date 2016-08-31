@@ -10,6 +10,36 @@ v 8.10.6
   - Fix privilege escalation via project export.
   - Require administrator privileges to perform a project import.
 v 8.11.1 (unreleased)
+v 8.11.4
+  - Fix broken gitlab:backup:restore because of bad permissions on repo storage !6098 (Dirk Hörner)
+  - Fix resolving conflicts on forks. !6082
+  - Fix diff commenting on merge requests created prior to 8.10. !6029
+  - Fix pipelines tab layout regression. !5952
+  - Fix "Wiki" link not appearing in navigation for projects with external wiki. !6057
+  - Do not enforce using hash with hidden key in CI configuration. !6079
+  - Fix hover leading space bug in pipeline graph !5980
+  - Block concurrent updates for Pipeline
+  - Fix issue boards leak private label names and descriptions
+
+v 8.11.3
+  - Don't show resolve conflicts link before MR status is updated
+  - Fix IE11 fork button bug !5982
+  - Don't prevent viewing the MR when git refs for conflicts can't be found on disk
+  - Allow system info page to handle case where info is unavailable
+  - Fix external issue tracker "Issues" link leading to 404s
+  - Don't try to show merge conflict resolution info if a merge conflict contains non-UTF-8 characters
+  - Label list shows all issues (opened or closed) with that label
+  - Automatically expand hidden discussions when accessed by a permalink !5585 (Mike Greiling)
+
+v 8.11.2
+  - Show "Create Merge Request" widget for push events to fork projects on the source project. !5978
+  - Use gitlab-workhorse 0.7.11 !5983
+  - Does not halt the GitHub import process when an error occurs. !5763
+  - Fix file links on project page when default view is Files !5933
+  - Fixed enter key in search input not working !5888
+
+v 8.11.1
+  - Pulled due to packaging error.
 
 v 8.11.0
   - Use test coverage value from the latest successful pipeline in badge. !5862
@@ -189,6 +219,7 @@ v 8.10.3
   - Fix importer for GitHub Pull Requests when a branch was removed. !5573
   - Ignore invalid IPs in X-Forwarded-For when trusted proxies are configured. !5584
   - Trim extra displayed carriage returns in diffs and files with CRLFs. !5588
+  - Fix label already exist error message in the right sidebar.
 
 v 8.10.2
   - User can now search branches by name. !5144

@@ -31,8 +31,8 @@
       this.input
         .on('keydown', function (e) {
           var keyCode = e.which;
-          if (keyCode === 13) {
-            e.preventDefault();
+          if (keyCode === 13 && !options.elIsInput) {
+            e.preventDefault()
           }
         })
         .on('keyup', function(e) {
@@ -46,7 +46,7 @@
           } else if (this.input.val() === "" && $inputContainer.hasClass(HAS_VALUE_CLASS)) {
             $inputContainer.removeClass(HAS_VALUE_CLASS);
           }
-          if (keyCode === 13) {
+          if (keyCode === 13 && !options.elIsInput) {
             return false;
           }
           if (this.options.remote) {
@@ -117,7 +117,7 @@
             }
           });
         } else {
-          return elements.show();
+          return elements.show().removeClass('option-hidden');
         }
       }
     };
@@ -190,9 +190,9 @@
 
     currentIndex = -1;
 
-    NON_SELECTABLE_CLASSES = '.divider, .separator, .dropdown-header, .dropdown-menu-empty-link, .option-hidden';
+    NON_SELECTABLE_CLASSES = '.divider, .separator, .dropdown-header, .dropdown-menu-empty-link';
 
-    SELECTABLE_CLASSES = ".dropdown-content li:not(" + NON_SELECTABLE_CLASSES + ")";
+    SELECTABLE_CLASSES = ".dropdown-content li:not(" + NON_SELECTABLE_CLASSES + ", .option-hidden)";
 
     CURSOR_SELECT_SCROLL_PADDING = 5
 
@@ -238,6 +238,7 @@
       }
       if (this.options.filterable) {
         this.filter = new GitLabDropdownFilter(this.filterInput, {
+          elIsInput: $(this.el).is('input'),
           filterInputBlur: this.filterInputBlur,
           filterByText: this.options.filterByText,
           onFilter: this.options.onFilter,
@@ -266,8 +267,12 @@
                 if (_this.dropdown.find('.dropdown-toggle-page').length) {
                   selector = ".dropdown-page-one " + selector;
                 }
-                $(selector, _this.dropdown).first().find('a').addClass('is-focused');
-                return currentIndex = 0;
+                if ($(_this.el).is('input')) {
+                  currentIndex = -1;
+                } else {
+                  $(selector, _this.dropdown).first().find('a').addClass('is-focused');
+                  currentIndex = 0;
+                }
               }
             };
           })(this)
@@ -560,10 +565,6 @@
         } else {
           field.remove();
         }
-        if (this.options.toggleLabel) {
-          this.updateLabel(selectedObject, el, this);
-        }
-        return selectedObject;
       } else if (el.hasClass(INDETERMINATE_CLASS)) {
         el.addClass(ACTIVE_CLASS);
         el.removeClass(INDETERMINATE_CLASS);
@@ -573,7 +574,6 @@
         if (!field.length && fieldName) {
           this.addInput(fieldName, value, selectedObject);
         }
-        return selectedObject;
       } else {
         if (!this.options.multiSelect || el.hasClass('dropdown-clear-active')) {
           this.dropdown.find("." + ACTIVE_CLASS).removeClass(ACTIVE_CLASS);
@@ -585,9 +585,6 @@
           field.remove();
         }
         el.addClass(ACTIVE_CLASS);
-        if (this.options.toggleLabel) {
-          this.updateLabel(selectedObject, el, this);
-        }
         if (value != null) {
           if (!field.length && fieldName) {
             this.addInput(fieldName, value, selectedObject);
@@ -595,8 +592,14 @@
             field.val(value).trigger('change');
           }
         }
-        return selectedObject;
       }
+
+      // Update label right after input has been added
+      if (this.options.toggleLabel) {
+        this.updateLabel(selectedObject, el, this);
+      }
+
+      return selectedObject;
     };
 
     GitLabDropdown.prototype.addInput = function(fieldName, value, selectedObject) {
@@ -613,15 +616,23 @@
 
     GitLabDropdown.prototype.selectRowAtIndex = function(index) {
       var $el, selector;
-      selector = SELECTABLE_CLASSES + ":eq(" + index + ") a";
+      // If we pass an option index
+      if (typeof index !== "undefined") {
+        selector = SELECTABLE_CLASSES + ":eq(" + index + ") a";
+      } else {
+        selector = ".dropdown-content .is-focused";
+      }
       if (this.dropdown.find(".dropdown-toggle-page").length) {
         selector = ".dropdown-page-one " + selector;
       }
       $el = $(selector, this.dropdown);
       if ($el.length) {
-        $el.first().trigger('click');
         var href = $el.attr('href');
-        if (href && href !== '#') Turbolinks.visit(href);
+        if (href && href !== '#') {
+          Turbolinks.visit(href);
+        } else {
+          $el.first().trigger('click');
+        }
       }
     };
 
@@ -657,7 +668,7 @@
             return false;
           }
           if (currentKeyCode === 13 && currentIndex !== -1) {
-            return _this.selectRowAtIndex(currentIndex);
+            _this.selectRowAtIndex();
           }
         };
       })(this));

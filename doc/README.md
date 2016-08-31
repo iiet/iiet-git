@@ -29,6 +29,7 @@
 - [Restart GitLab](administration/restart_gitlab.md) Learn how to restart GitLab and its components.
 - [Integration](integration/README.md) How to integrate with systems such as JIRA, Redmine, Twitter.
 - [Issue closing](customization/issue_closing.md) Customize how to close an issue from commit messages.
+- [Koding](administration/integration/koding.md) Set up Koding to use with GitLab.
 - [Libravatar](customization/libravatar.md) Use Libravatar for user avatars.
 - [Log system](administration/logs.md) Log system.
 - [Environment Variables](administration/environment_variables.md) to configure GitLab.

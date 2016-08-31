@@ -471,8 +471,6 @@ class Project < ActiveRecord::Base
   end
 
   def reset_cache_and_import_attrs
-    update(import_error: nil)
-
     ProjectCacheWorker.perform_async(self.id)
 
     self.import_data.destroy if self.import_data
@@ -680,6 +678,10 @@ class Project < ActiveRecord::Base
 
   def cache_has_external_issue_tracker
     update_column(:has_external_issue_tracker, services.external_issue_trackers.any?)
+  end
+
+  def has_wiki?
+    wiki_enabled? || has_external_wiki?
   end
 
   def external_wiki
