@@ -402,6 +402,7 @@ gem 'oauth2', '~> 1.4'
 
 # Health check
 gem 'health_check', '~> 2.6.0'
+gem 'iiet-accounts-oauth', '= 0.0.1'
 
 # System information
 gem 'vmstat', '~> 2.3.0'
