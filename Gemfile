@@ -347,6 +347,8 @@ gem 'paranoia', '~> 2.2'
 
 # Health check
 gem 'health_check', '~> 2.2.0'
+# Added at 2016-07-02 10:28:25 +0200 by kruczjak:
+gem 'iiet-accounts-oauth', '= 0.0.1'
 
 # System information
 gem 'vmstat', '~> 2.3.0'
